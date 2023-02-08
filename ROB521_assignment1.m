@@ -30,7 +30,8 @@
 clear; close all; clc;
 
 % set random seed for repeatability if desired
-% rng(1);
+% rng('default')
+% rng(7);
 
 % ==========================
 % Maze Generation
@@ -75,12 +76,70 @@ edges = [];  % each row is should be an edge of the form [x1 y1 x2 y2]
 disp("Time to create PRM graph")
 tic;
 % ------insert your PRM generation code here-------
+% qiaoxin2 solution
+% generate 500 uniform samples, check for collision and then add to
+% milestones
+% The map contains all lines, each row represents a line
+dx = rand(1,nS);
+dy = rand(1,nS);
 
+% bottom left and top right
+% bl = [0.5,0.5];
+% tr = [7.5,5.5];
+% 1 and 3 are xs, and 2 and 4 are ys
+min_columns = min(map);
+max_columns = max(map);
 
+xmin = min(min_columns(1),min_columns(3));
+xmax = max(max_columns(1),max_columns(3));
 
+ymin = min(min_columns(2),min_columns(4));
+ymax = max(max_columns(2),max_columns(4));
 
+% display([xmin,ymin,xmax,ymax]);
+x_samples = xmin + dx*col;
+y_samples = ymin + dy*row;
 
+% size(x_samples)
 
+% here is our 500 points
+sample_pts = [x_samples;y_samples]';
+% size(sample_pts)
+
+% check for collisions, add to milestones
+min_distances = MinDist2Edges(sample_pts, map)';
+% size(min_distances)
+
+for i = 1:nS
+    sample_pt = sample_pts(i,:);
+    if min_distances(i) > 0.1
+        milestones = [milestones; sample_pt];
+    end 
+end 
+
+n_milestones = size(milestones,1)
+adj_mat = zeros(n_milestones);
+
+for j = 1:n_milestones
+    milestone = milestones(j,:);
+    idx = knnsearch(milestones,milestone,'K',10);
+    for k = idx
+        neighbour = milestones(k,:);
+        [inCollision, e] = CheckCollision(milestone,neighbour,map);
+        if ~inCollision
+            if(size(edges) ~= 0)
+                if(ismember([milestone, neighbour],edges,'rows')~=1 && (ismember([neighbour,milestone],edges,'rows')~=1))
+                    edges = [edges; milestone, neighbour];
+                end
+            else
+                display("First time edge")
+                edges = [edges; milestone, neighbour];
+            end
+%             adj_mat(i, idxs(j)) = 1;
+%             adj_mat(idxs(j), i) = 1;
+        end
+    end
+end
 
 
 
@@ -98,7 +157,7 @@ drawnow;
 
 print -dpng assignment1_q1.png
 
-
+%%
 % =================================================================
 % Question 2: Find the shortest path over the PRM graph
 % =================================================================
