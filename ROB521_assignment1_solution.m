@@ -30,8 +30,7 @@
 clear; close all; clc;
 
 % set random seed for repeatability if desired
-% rng('default')
-% rng(7);
+rng('default');
 
 % ==========================
 % Maze Generation
@@ -76,92 +75,64 @@ edges = [];  % each row is should be an edge of the form [x1 y1 x2 y2]
 disp("Time to create PRM graph")
 tic;
 % ------insert your PRM generation code here-------
-% qiaoxin2 solution
-% generate 500 uniform samples, check for collision and then add to
-% milestones
-% The map contains all lines, each row represents a line
-dx = rand(1,nS);
-dy = rand(1,nS);
 
-% bottom left and top right
-% bl = [0.5,0.5];
-% tr = [7.5,5.5];
-% 1 and 3 are xs, and 2 and 4 are ys
-min_columns = min(map);
-max_columns = max(map);
+% uniform random sampling
+r1 = rand(500,1);
+r2 = rand(500,1);
 
-xmin = min(min_columns(1),min_columns(3));
-xmax = max(max_columns(1),max_columns(3));
+mins = min(map);
+maxs = max(map);
+xmin = min([mins(1) mins(3)]);
+ymin = min([mins(2) mins(4)]);
+xmax = max([maxs(1) maxs(3)]);
+ymax = max([maxs(2) maxs(4)]);
 
-ymin = min(min_columns(2),min_columns(4));
-ymax = max(max_columns(2),max_columns(4));
+pt_x = xmin + r1 * col;
+pt_y = ymin + r2 * row;
+samples = [pt_x pt_y];
 
-% display([xmin,ymin,xmax,ymax]);
-x_samples = xmin + dx*col;
-y_samples = ymin + dy*row;
-
-% size(x_samples)
-
-% here is our 500 points
-sample_pts = [x_samples;y_samples]';
-% size(sample_pts)
-
-% check for collisions, add to milestones
-min_distances = MinDist2Edges(sample_pts, map)';
-% size(min_distances)
-
+% collision checking for the samples
+% add to milestones list if collision-free
 for i = 1:nS
-    sample_pt = sample_pts(i,:);
-    if min_distances(i) > 0.1
-        milestones = [milestones; sample_pt];
-    end 
-end 
-
-% milestones = unique(milestones,'rows');
-
-n_milestones = size(milestones,1);
-dist_mile = zeros(n_milestones);
-adj_mat = zeros(n_milestones);
-size(adj_mat);
-
-for i = 1:n_milestones
-    milestone = milestones(i,:);
-    idx = knnsearch(milestones,milestone,'K',10);
-    for k = idx
-        neighbour = milestones(k,:);
-        % check collision
-        [inCollision, e] = CheckCollision(milestone,neighbour,map);
-        if ~inCollision
-            if(size(edges) ~= 0)
-                if(ismember([milestone, neighbour],edges,'rows')~=1 && (ismember([neighbour,milestone],edges,'rows')~=1))
-                    edges = [edges; milestone, neighbour];
-                    % update the adjacancy matrix
-                    adj_mat(i, k) = 1;
-                    adj_mat(k, i) = 1;
-                end
-            else
-                display("First time edge is added")
-                edges = [edges; milestone, neighbour];
-                
-                 adj_mat(i, k) = 1;
-                 adj_mat(k, i) = 1;
-            end
-        end
+    sampled_pt = samples(i,:);
+    min_d_pt = MinDist2Edges(sampled_pt, map);
+    if min_d_pt > 0.1
+        milestones = [milestones; sampled_pt];
     end
-    
-    % build the adjacancy matrix
-    for j = i:n_milestones
-        j_milestone = milestones(j, :);
-        ij_dist = norm(milestone - j_milestone);
-        dist_mile(i, j) = ij_dist;
-        dist_mile(j, i) = ij_dist;
-    end
-
 end
 
+% for each milestone, find its cloest 8 neighbours
+% connect with an edge if the edge is collision-free
+k_neighbours = 8;
+n_milestones = length(milestones);
 
-% build an diatance matrix to help with dijkstra
-dist_mile = dist_mile .* adj_mat;
+dist_milestones = zeros(n_milestones);
+adj_mat = zeros(n_milestones);
+for i = 1:n_milestones
+    i_milestone = milestones(i, :);
+    for j = i:n_milestones
+        j_milestone = milestones(j, :);
+        ij_dist = norm(i_milestone - j_milestone);
+        dist_milestones(i, j) = ij_dist;
+        dist_milestones(j, i) = ij_dist;
+    end
+
+    [dists, idxs] = mink(dist_milestones(i, :), k_neighbours + 1);
+    for j = 2:k_neighbours + 1
+        edge = [i_milestone milestones(idxs(j), :)];
+        edge_idx = [i idxs(j)];
+        [inCollision, tmp] = CheckCollision(i_milestone, milestones(idxs(j), :), map);
+        if ~inCollision
+            edges = [edges; edge];
+            adj_mat(i, idxs(j)) = 1;
+            adj_mat(idxs(j), i) = 1;
+        end
+    end
+end
+
+% build an adjacency matrix for the graph for running part 2
+% each entry is the length of the edge or 0 if no edge exists
+dist_milestones = dist_milestones .* adj_mat
 
 % ------end of your PRM generation code -------
 toc;
@@ -193,52 +164,49 @@ tic;
 spath = []; % shortest path, stored as a milestone row index sequence
 
 
-% qiaoxin2 solution for Dijkstra
+% ------insert your shortest path finding algorithm here-------
+
 % Dijkstra's algorithm 
-% initilize the distance matrix
-dist = Inf(n_milestones,1);
+dist_nodes = Inf * ones(n_milestones,1);
+parent = -1 * ones(n_milestones, 1);
+dist_nodes(1) = 0;
 
-previous = -1 * ones(n_milestones, 1);
+queue = 1:n_milestones;
+success = false;
 
-dist(1) = 0;
-% length of the queue
-q = 1:n_milestones;
-% initialize done = false
-done = false;
-
-while length(q) > 0
+while length(queue) > 0
     
     % find min node
-    value_min = Inf;
-    index_min = -1;
+    min_val = Inf;
+    min_idx = -1;
     min_q_idx = -1;
-    for j = 1:length(q)
-        node_j = q(j);
-        if dist(node_j) < value_min
-            value_min = dist(node_j);
+    for j = 1:length(queue)
+        node_j = queue(j);
+        if dist_nodes(node_j) < min_val
+            min_val = dist_nodes(node_j);
             min_q_idx = j;
-            index_min = node_j;
+            min_idx = node_j;
         end
     end
     if min_q_idx == -1
         break
     end
-    q = [q(1:min_q_idx-1) q(min_q_idx+1:end)];
+    queue = [queue(1:min_q_idx-1) queue(min_q_idx+1:end)];
     
-    % update previous
+    % update parent
     for j = 1:n_milestones
-       if dist_mile(index_min, j) > 0
-           if any(q == j)
-               if dist(index_min) + dist_mile(index_min, j) < dist(j)
-                   dist(j) = dist(index_min) + dist_mile(index_min, j);
-                   previous(j) = index_min;
+       if dist_milestones(min_idx, j) > 0
+           if any(queue == j)
+               if dist_nodes(min_idx) + dist_milestones(min_idx, j) < dist_nodes(j)
+                   dist_nodes(j) = dist_nodes(min_idx) + dist_milestones(min_idx, j);
+                   parent(j) = min_idx;
                end
            end
        end
     end
     
-    if all(milestones(index_min, :) == finish)
-        done = true;
+    if all(milestones(min_idx, :) == finish)
+        success = true;
         break
     end
     
@@ -246,19 +214,21 @@ while length(q) > 0
 end
 
 % store path
-if done
-    path_r = [2];
+if success
+    path_reverse = [2];
     i = 2;
     while true
        if all(milestones(i, :) == start)
            break
        end
-       i = previous(i);
-       path_r = [path_r i];
+       i = parent(i);
+       path_reverse = [path_reverse i];
     end
-    spath = flip(path_r);
+    spath = flip(path_reverse);
 end
 
+    
+    
 % ------end of shortest path finding algorithm------- 
 toc;    
 
@@ -273,8 +243,8 @@ drawnow;
 
 print -dpng assingment1_q2.png
 
-%%
-% ================================================================
+
+%% ================================================================
 % Question 3: find a faster way
 % ================================================================
 %
@@ -284,12 +254,9 @@ print -dpng assingment1_q2.png
 % seconds on your computer? (Anything larger than 40x40 will suffice for 
 % full marks)
 
-
-clear; 
-close all; 
-clc;
-row = 50;
-col = 50;
+clear; close all; clc;
+row = 80;
+col = 80;
 map = maze(row,col);
 start = [0.5, 1.0];
 finish = [col+0.5, row];
@@ -305,115 +272,93 @@ drawnow;
 fprintf("Attempting large %d X %d maze... \n", row, col);
 tic;        
 % ------insert your optimized algorithm here------
-% qiaoxin2 solution 
-% we want to reduce the sampling points and thus check less collsions
-% lets sample points in between two walls
-x_wall = sort([map(:,1) map(:,3)]);
-x_wall = unique(x_wall);
 
-y_wall = sort([map(:,2) map(:,4)]);
-y_wall = unique(y_wall);
-
-sample_x = (x_wall(1:end-1) + x_wall(2:end))/2;
-sample_y = (y_wall(1:end-1) + y_wall(2:end))/2;
-
-for i = 1:length(sample_x)
-    for j = 1:length(sample_y)
-        milestones = [milestones; [sample_x(i) sample_y(j)]];
-    end
-end
-
-% reuse the code from part(1)
-n_milestones = size(milestones,1);
-dist_mile = zeros(n_milestones);
-adj_mat = zeros(n_milestones);
-size(adj_mat);
-
-for i = 1:n_milestones
-    milestone = milestones(i,:);
-    idx = knnsearch(milestones,milestone,'K',5);
-    for k = idx
-        neighbour = milestones(k,:);
-        % check collision
-        [inCollision, e] = CheckCollision(milestone,neighbour,map);
-        if ~inCollision
-            if(size(edges) ~= 0)
-                if(ismember([milestone, neighbour],edges,'rows')~=1 && (ismember([neighbour,milestone],edges,'rows')~=1))
-                    edges = [edges; milestone, neighbour];
-                    % update the adjacancy matrix
-                    adj_mat(i, k) = 1;
-                    adj_mat(k, i) = 1;
-                end
-            else
-                display("First time edge is added")
-                edges = [edges; milestone, neighbour];
-                
-                 adj_mat(i, k) = 1;
-                 adj_mat(k, i) = 1;
-            end
-        end
-    end
-    
-    % build the adjacancy matrix
-    for j = i:n_milestones
-        j_milestone = milestones(j, :);
-        ij_dist = norm(milestone - j_milestone);
-        dist_mile(i, j) = ij_dist;
-        dist_mile(j, i) = ij_dist;
-    end
-
-end
-
-
-% build an diatance matrix to help with dijkstra
-dist_mile = dist_mile .* adj_mat;
+% workspace-guided sampling
+% sample points at the middle of every adjacent wall pairs
+xset = unique(sort([map(:, 1) map(:, 3)]));
+yset = unique(sort([map(:, 2) map(:, 4)]));
+pt_x = (xset(1:end-1) + xset(2:end)) / 2;
+pt_y = (yset(1:end-1) + yset(2:end)) / 2;
 
 spath = [];
+for i = 1:length(pt_x)
+    for j = 1:length(pt_y)
+        milestones = [milestones; [pt_x(i) pt_y(j)]];
+    end
+end
+
+% locate closest 4 neighbours
+% connect with edge if collision-free
+k_neighbours = 4;
+n_milestones = length(milestones);
+
+
+dist_milestones = zeros(n_milestones);
+adj_mat = zeros(n_milestones);
+for i = 1:n_milestones
+    i_milestone = milestones(i, :);
+    for j = i:n_milestones
+        j_milestone = milestones(j, :);
+        ij_dist = norm(i_milestone - j_milestone);
+        dist_milestones(i, j) = ij_dist;
+        dist_milestones(j, i) = ij_dist;
+    end
+
+    [dists, idxs] = mink(dist_milestones(i, :), k_neighbours + 1);
+    for j = 2:k_neighbours + 1
+        edge = [i_milestone milestones(idxs(j), :)];
+        edge_idx = [i idxs(j)];
+        [inCollision, tmp] = CheckCollision(i_milestone, milestones(idxs(j), :), map);
+        if ~inCollision
+            edges = [edges; edge];
+            adj_mat(i, idxs(j)) = 1;
+            adj_mat(idxs(j), i) = 1;
+        end
+    end
+end
+dist_milestones = dist_milestones .* adj_mat;
+
 % Dijkstra's algorithm 
-% initilize the distance matrix
-dist = Inf(n_milestones,1);
+dist_nodes = Inf * ones(n_milestones,1);
+parent = -1 * ones(n_milestones, 1);
+dist_nodes(1) = 0;
 
-previous = -1 * ones(n_milestones, 1);
+queue = 1:n_milestones;
+success = false;
 
-dist(1) = 0;
-% length of the queue
-q = 1:n_milestones;
-% initialize done = false
-done = false;
-
-while length(q) > 0
+while length(queue) > 0
     
     % find min node
-    value_min = Inf;
-    index_min = -1;
+    min_val = Inf;
+    min_idx = -1;
     min_q_idx = -1;
-    for j = 1:length(q)
-        node_j = q(j);
-        if dist(node_j) < value_min
-            value_min = dist(node_j);
+    for j = 1:length(queue)
+        node_j = queue(j);
+        if dist_nodes(node_j) < min_val
+            min_val = dist_nodes(node_j);
             min_q_idx = j;
-            index_min = node_j;
+            min_idx = node_j;
         end
     end
     if min_q_idx == -1
         break
     end
-    q = [q(1:min_q_idx-1) q(min_q_idx+1:end)];
+    queue = [queue(1:min_q_idx-1) queue(min_q_idx+1:end)];
     
-    % update previous
+    % update parent
     for j = 1:n_milestones
-       if dist_mile(index_min, j) > 0
-           if any(q == j)
-               if dist(index_min) + dist_mile(index_min, j) < dist(j)
-                   dist(j) = dist(index_min) + dist_mile(index_min, j);
-                   previous(j) = index_min;
+       if dist_milestones(min_idx, j) > 0
+           if any(queue == j)
+               if dist_nodes(min_idx) + dist_milestones(min_idx, j) < dist_nodes(j)
+                   dist_nodes(j) = dist_nodes(min_idx) + dist_milestones(min_idx, j);
+                   parent(j) = min_idx;
                end
            end
        end
     end
     
-    if all(milestones(index_min, :) == finish)
-        done = true;
+    if all(milestones(min_idx, :) == finish)
+        success = true;
         break
     end
     
@@ -421,18 +366,21 @@ while length(q) > 0
 end
 
 % store path
-if done
-    path_r = [2];
+spath = [];
+if success
+    path_reverse = [2];
     i = 2;
     while true
        if all(milestones(i, :) == start)
            break
        end
-       i = previous(i);
-       path_r = [path_r i];
+       i = parent(i);
+       path_reverse = [path_reverse i];
     end
-    spath = flip(path_r);
+    spath = flip(path_reverse);
 end
+
+
 
 % ------end of your optimized algorithm-------
 dt = toc;

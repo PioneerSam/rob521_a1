@@ -288,8 +288,8 @@ print -dpng assingment1_q2.png
 clear; 
 close all; 
 clc;
-row = 50;
-col = 50;
+row = 70;
+col = 70;
 map = maze(row,col);
 start = [0.5, 1.0];
 finish = [col+0.5, row];
@@ -314,125 +314,12 @@ x_wall = unique(x_wall);
 y_wall = sort([map(:,2) map(:,4)]);
 y_wall = unique(y_wall);
 
-sample_x = (x_wall(1:end-1) + x_wall(2:end))/2;
-sample_y = (y_wall(1:end-1) + y_wall(2:end))/2;
-
-for i = 1:length(sample_x)
-    for j = 1:length(sample_y)
-        milestones = [milestones; [sample_x(i) sample_y(j)]];
-    end
-end
-
-% reuse the code from part(1)
-n_milestones = size(milestones,1);
-dist_mile = zeros(n_milestones);
-adj_mat = zeros(n_milestones);
-size(adj_mat);
-
-for i = 1:n_milestones
-    milestone = milestones(i,:);
-    idx = knnsearch(milestones,milestone,'K',5);
-    for k = idx
-        neighbour = milestones(k,:);
-        % check collision
-        [inCollision, e] = CheckCollision(milestone,neighbour,map);
-        if ~inCollision
-            if(size(edges) ~= 0)
-                if(ismember([milestone, neighbour],edges,'rows')~=1 && (ismember([neighbour,milestone],edges,'rows')~=1))
-                    edges = [edges; milestone, neighbour];
-                    % update the adjacancy matrix
-                    adj_mat(i, k) = 1;
-                    adj_mat(k, i) = 1;
-                end
-            else
-                display("First time edge is added")
-                edges = [edges; milestone, neighbour];
-                
-                 adj_mat(i, k) = 1;
-                 adj_mat(k, i) = 1;
-            end
-        end
-    end
-    
-    % build the adjacancy matrix
-    for j = i:n_milestones
-        j_milestone = milestones(j, :);
-        ij_dist = norm(milestone - j_milestone);
-        dist_mile(i, j) = ij_dist;
-        dist_mile(j, i) = ij_dist;
-    end
-
-end
+sample_x = 
 
 
-% build an diatance matrix to help with dijkstra
-dist_mile = dist_mile .* adj_mat;
 
-spath = [];
-% Dijkstra's algorithm 
-% initilize the distance matrix
-dist = Inf(n_milestones,1);
 
-previous = -1 * ones(n_milestones, 1);
 
-dist(1) = 0;
-% length of the queue
-q = 1:n_milestones;
-% initialize done = false
-done = false;
-
-while length(q) > 0
-    
-    % find min node
-    value_min = Inf;
-    index_min = -1;
-    min_q_idx = -1;
-    for j = 1:length(q)
-        node_j = q(j);
-        if dist(node_j) < value_min
-            value_min = dist(node_j);
-            min_q_idx = j;
-            index_min = node_j;
-        end
-    end
-    if min_q_idx == -1
-        break
-    end
-    q = [q(1:min_q_idx-1) q(min_q_idx+1:end)];
-    
-    % update previous
-    for j = 1:n_milestones
-       if dist_mile(index_min, j) > 0
-           if any(q == j)
-               if dist(index_min) + dist_mile(index_min, j) < dist(j)
-                   dist(j) = dist(index_min) + dist_mile(index_min, j);
-                   previous(j) = index_min;
-               end
-           end
-       end
-    end
-    
-    if all(milestones(index_min, :) == finish)
-        done = true;
-        break
-    end
-    
-    
-end
-
-% store path
-if done
-    path_r = [2];
-    i = 2;
-    while true
-       if all(milestones(i, :) == start)
-           break
-       end
-       i = previous(i);
-       path_r = [path_r i];
-    end
-    spath = flip(path_r);
-end
 
 % ------end of your optimized algorithm-------
 dt = toc;
